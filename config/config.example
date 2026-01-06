@@ -1,0 +1,24 @@
+# Claude Code Mobile Configuration
+# Copy this to ~/.config/claude-mobile/config and fill in your values
+
+# Vultr API credentials
+# Get your API key from: https://my.vultr.com/settings/#settingsapi
+VULTR_API_KEY="your-vultr-api-key-here"
+
+# Your VM instance ID (from Vultr dashboard URL or API)
+VULTR_INSTANCE_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Tailscale IP of your VM (find with: tailscale ip -4)
+TAILSCALE_IP="100.x.x.x"
+
+# SSH configuration
+SSH_PORT="22"           # Default 22, change if you use a custom port
+SSH_USER="your-username"
+
+# Poke push notifications
+# Get your webhook URL from: https://poke.dev
+POKE_WEBHOOK_URL="https://poke.dev/api/webhook/your-webhook-id"
+
+# Optional: ntfy.sh as alternative to Poke (self-hostable)
+# NTFY_TOPIC="your-topic-name"
+# NTFY_SERVER="https://ntfy.sh"  # or your self-hosted server

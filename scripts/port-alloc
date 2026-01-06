@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+#
+# port-alloc - Deterministic port allocation based on branch/directory name
+#
+# Usage:
+#   port-alloc [service]          # Get port for current branch
+#   port-alloc [service] [name]   # Get port for specific name
+#
+# Services and base ports:
+#   web      - 3000  (React, Next.js, Vue, etc.)
+#   api      - 8000  (Django, FastAPI, Express, etc.)
+#   db       - 5432  (PostgreSQL-style)
+#   redis    - 6379
+#   custom   - 9000
+#
+# Examples:
+#   port-alloc web              # Returns 3001-3099 based on branch
+#   port-alloc api feature-auth # Returns 8001-8099 based on "feature-auth"
+#   eval $(port-alloc --env)    # Export all ports as env vars
+
+set -euo pipefail
+
+# Base ports for each service
+declare -A BASE_PORTS=(
+    [web]=3000
+    [api]=8000
+    [django]=8000
+    [express]=3000
+    [fastapi]=8000
+    [flask]=5000
+    [rails]=3000
+    [db]=5432
+    [postgres]=5432
+    [mysql]=3306
+    [redis]=6379
+    [mongo]=27017
+    [custom]=9000
+)
+
+# Port range (base + 1 to base + 99)
+PORT_RANGE=99
+
+get_branch_name() {
+    git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""
+}
+
+get_dir_name() {
+    basename "$PWD"
+}
+
+# Hash function - deterministic port from name
+hash_to_port() {
+    local name="$1"
+    local base="$2"
+    local hash=0
+
+    # Simple hash: sum of ASCII values
+    for (( i=0; i<${#name}; i++ )); do
+        char="${name:$i:1}"
+        ascii=$(printf '%d' "'$char")
+        hash=$((hash + ascii))
+    done
+
+    # Map to port range (base+1 to base+99)
+    local offset=$((hash % PORT_RANGE + 1))
+    echo $((base + offset))
+}
+
+get_name() {
+    local explicit_name="$1"
+
+    if [[ -n "$explicit_name" ]]; then
+        echo "$explicit_name"
+    else
+        # Try branch name first, fall back to directory
+        local branch
+        branch=$(get_branch_name)
+        if [[ -n "$branch" && "$branch" != "main" && "$branch" != "master" ]]; then
+            echo "$branch"
+        else
+            get_dir_name
+        fi
+    fi
+}
+
+print_port() {
+    local service="$1"
+    local name="$2"
+
+    local base_port="${BASE_PORTS[$service]:-9000}"
+    local port
+    port=$(hash_to_port "$name" "$base_port")
+
+    echo "$port"
+}
+
+print_all_env() {
+    local name
+    name=$(get_name "")
+
+    echo "# Ports for: $name"
+    echo "export PORT_WEB=$(hash_to_port "$name" 3000)"
+    echo "export PORT_API=$(hash_to_port "$name" 8000)"
+    echo "export PORT_DB=$(hash_to_port "$name" 5432)"
+    echo "export PORT_REDIS=$(hash_to_port "$name" 6379)"
+    echo "export PORT_CUSTOM=$(hash_to_port "$name" 9000)"
+    echo "export DJANGO_PORT=$(hash_to_port "$name" 8000)"
+    echo "export REACT_PORT=$(hash_to_port "$name" 3000)"
+    echo "export NEXT_PORT=$(hash_to_port "$name" 3000)"
+}
+
+print_info() {
+    local name
+    name=$(get_name "")
+
+    echo ""
+    echo "Port Allocation for: $name"
+    echo "─────────────────────────────"
+    printf "  %-12s %s\n" "web:" "$(hash_to_port "$name" 3000)"
+    printf "  %-12s %s\n" "api:" "$(hash_to_port "$name" 8000)"
+    printf "  %-12s %s\n" "db:" "$(hash_to_port "$name" 5432)"
+    printf "  %-12s %s\n" "redis:" "$(hash_to_port "$name" 6379)"
+    printf "  %-12s %s\n" "custom:" "$(hash_to_port "$name" 9000)"
+    echo ""
+    echo "Usage examples:"
+    echo "  python manage.py runserver 0.0.0.0:\$(port-alloc django)"
+    echo "  npm run dev -- --port \$(port-alloc web)"
+    echo "  eval \$(port-alloc --env)  # Export all as env vars"
+    echo ""
+}
+
+usage() {
+    cat << 'EOF'
+port-alloc - Deterministic port allocation for parallel development
+
+Usage:
+  port-alloc [service]          Get port for current branch/directory
+  port-alloc [service] [name]   Get port for specific name
+  port-alloc --env              Print all ports as exportable env vars
+  port-alloc --info             Show port allocation info
+  port-alloc --help             Show this help
+
+Services: web, api, django, express, fastapi, flask, rails, db, postgres,
+          mysql, redis, mongo, custom
+
+Examples:
+  port-alloc web                     # Port for web server
+  port-alloc api feature-sidebar     # Port for specific branch
+  eval $(port-alloc --env)           # Export all ports
+
+Use in your dev commands:
+  python manage.py runserver 0.0.0.0:$(port-alloc django)
+  npm run dev -- --port $(port-alloc web)
+  PGPORT=$(port-alloc db) psql mydb
+EOF
+}
+
+main() {
+    case "${1:-}" in
+        --env)
+            print_all_env
+            ;;
+        --info)
+            print_info
+            ;;
+        --help|-h|"")
+            if [[ -z "${1:-}" ]]; then
+                print_info
+            else
+                usage
+            fi
+            ;;
+        *)
+            local service="$1"
+            local name
+            name=$(get_name "${2:-}")
+            print_port "$service" "$name"
+            ;;
+    esac
+}
+
+main "$@"

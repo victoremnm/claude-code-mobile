@@ -1,0 +1,311 @@
+#!/usr/bin/env bash
+#
+# vm-bootstrap - Set up a fresh Vultr VM for Claude Code mobile development
+#
+# Usage: curl -sSL https://raw.githubusercontent.com/USER/claude-code-mobile/main/scripts/vm-bootstrap | bash
+#
+# This script:
+#   1. Hardens SSH (custom port, key-only auth)
+#   2. Sets up firewall (nftables + cloud firewall)
+#   3. Installs Tailscale
+#   4. Installs development tools (mosh, tmux, git, etc.)
+#   5. Installs Claude Code
+#   6. Configures the environment
+
+set -euo pipefail
+
+# Configuration
+SSH_PORT="${SSH_PORT:-47892}"
+USERNAME="${SUDO_USER:-$(whoami)}"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log() { echo -e "${GREEN}[+]${NC} $1"; }
+warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+error() { echo -e "${RED}[✗]${NC} $1" >&2; exit 1; }
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        error "This script must be run as root"
+    fi
+}
+
+detect_os() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        OS=$ID
+    else
+        error "Cannot detect OS"
+    fi
+    log "Detected OS: $OS"
+}
+
+install_packages() {
+    log "Installing essential packages..."
+
+    case $OS in
+        ubuntu|debian)
+            apt-get update -qq
+            apt-get install -y -qq \
+                mosh tmux git curl wget jq htop ncdu tree \
+                build-essential libssl-dev pkg-config \
+                fail2ban nftables \
+                unzip zip \
+                zsh
+            ;;
+        fedora|rhel|centos)
+            dnf install -y \
+                mosh tmux git curl wget jq htop ncdu tree \
+                gcc gcc-c++ openssl-devel \
+                fail2ban nftables \
+                unzip zip \
+                zsh
+            ;;
+        *)
+            error "Unsupported OS: $OS"
+            ;;
+    esac
+}
+
+harden_ssh() {
+    log "Hardening SSH configuration..."
+
+    local sshd_config="/etc/ssh/sshd_config"
+
+    # Backup original config
+    cp "$sshd_config" "${sshd_config}.backup"
+
+    # Create hardened config
+    cat > "$sshd_config" << EOF
+# SSH Server Configuration - Hardened for mobile development
+
+Port $SSH_PORT
+AddressFamily inet
+ListenAddress 0.0.0.0
+
+# Authentication
+PermitRootLogin prohibit-password
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+UsePAM yes
+
+# Security
+X11Forwarding no
+PrintMotd no
+AcceptEnv LANG LC_*
+
+# Subsystem
+Subsystem sftp /usr/lib/openssh/sftp-server
+
+# Connection limits
+MaxAuthTries 3
+MaxSessions 10
+ClientAliveInterval 300
+ClientAliveCountMax 2
+EOF
+
+    # Restart SSH
+    systemctl restart sshd
+
+    warn "SSH port changed to $SSH_PORT - update your connection settings!"
+}
+
+setup_firewall() {
+    log "Configuring firewall with nftables..."
+
+    cat > /etc/nftables.conf << EOF
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        # Accept established/related
+        ct state established,related accept
+
+        # Accept loopback
+        iif lo accept
+
+        # Accept ICMP
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+
+        # Accept SSH on custom port
+        tcp dport $SSH_PORT accept
+
+        # Accept mosh UDP range
+        udp dport 60000-61000 accept
+
+        # Accept Tailscale
+        udp dport 41641 accept
+
+        # Log dropped packets (optional, disable if too noisy)
+        # log prefix "nftables dropped: " limit rate 5/minute
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+EOF
+
+    systemctl enable nftables
+    systemctl start nftables
+    nft -f /etc/nftables.conf
+}
+
+setup_fail2ban() {
+    log "Configuring fail2ban..."
+
+    cat > /etc/fail2ban/jail.local << EOF
+[DEFAULT]
+bantime = 3600
+findtime = 600
+maxretry = 3
+
+[sshd]
+enabled = true
+port = $SSH_PORT
+logpath = /var/log/auth.log
+maxretry = 3
+EOF
+
+    systemctl enable fail2ban
+    systemctl restart fail2ban
+}
+
+install_tailscale() {
+    log "Installing Tailscale..."
+
+    curl -fsSL https://tailscale.com/install.sh | sh
+
+    log "Tailscale installed. Run 'tailscale up' to authenticate."
+}
+
+install_nodejs() {
+    log "Installing Node.js via nvm..."
+
+    # Install nvm for the user
+    sudo -u "$USERNAME" bash << 'EOF'
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm install --lts
+nvm use --lts
+EOF
+}
+
+install_claude() {
+    log "Installing Claude Code..."
+
+    sudo -u "$USERNAME" bash << 'EOF'
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+npm install -g @anthropic-ai/claude-code
+EOF
+}
+
+setup_user_environment() {
+    log "Setting up user environment..."
+
+    local user_home="/home/$USERNAME"
+
+    # Create directories
+    sudo -u "$USERNAME" mkdir -p \
+        "$user_home/Code" \
+        "$user_home/.config/claude-mobile" \
+        "$user_home/.claude/hooks"
+
+    # Copy tmux config if it exists in this repo
+    if [[ -f "config/tmux.conf" ]]; then
+        cp config/tmux.conf "$user_home/.tmux.conf"
+        chown "$USERNAME:$USERNAME" "$user_home/.tmux.conf"
+    fi
+
+    # Add tmux auto-attach to zshrc
+    cat >> "$user_home/.zshrc" << 'EOF'
+
+# Auto-attach to tmux on SSH login
+if [[ -z "$TMUX" && $- == *i* && -n "$SSH_CONNECTION" ]]; then
+    tmux attach -t main 2>/dev/null || tmux new -s main
+fi
+
+# Claude Code aliases
+alias cc="claude"
+alias ccc="claude --continue"
+alias ccr="claude --resume"
+alias proj="cd ~/Code"
+
+# Git worktree helpers
+alias gwl="git worktree list"
+gwf() {
+    local branch="$1"
+    local project_name="${PWD##*/}"
+    [[ -z "$branch" ]] && { echo "Usage: gwf <branch-name>"; return 1; }
+    git worktree add "../${project_name}-${branch}" -b "$branch"
+    cd "../${project_name}-${branch}"
+}
+EOF
+    chown "$USERNAME:$USERNAME" "$user_home/.zshrc"
+
+    # Change default shell to zsh
+    chsh -s "$(which zsh)" "$USERNAME"
+}
+
+print_summary() {
+    local tailscale_ip
+    tailscale_ip=$(tailscale ip -4 2>/dev/null || echo "Not connected")
+
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  VM Bootstrap Complete!${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "  SSH Port:      $SSH_PORT"
+    echo "  Tailscale IP:  $tailscale_ip"
+    echo "  User:          $USERNAME"
+    echo ""
+    echo "  Next steps:"
+    echo "    1. Run 'tailscale up' to connect to your Tailscale network"
+    echo "    2. Update your local vm-start script with:"
+    echo "       SSH_PORT=$SSH_PORT"
+    echo "       TAILSCALE_IP=<your-tailscale-ip>"
+    echo "    3. Set your ANTHROPIC_API_KEY in ~/.bashrc or ~/.zshrc"
+    echo "    4. Configure Poke notifications in ~/.config/claude-mobile/config"
+    echo ""
+    echo "  Connect from your phone:"
+    echo "    mosh --ssh=\"ssh -p $SSH_PORT\" $USERNAME@$tailscale_ip"
+    echo ""
+}
+
+main() {
+    check_root
+    detect_os
+
+    log "Starting VM bootstrap..."
+
+    install_packages
+    harden_ssh
+    setup_firewall
+    setup_fail2ban
+    install_tailscale
+    install_nodejs
+    install_claude
+    setup_user_environment
+
+    print_summary
+}
+
+main "$@"

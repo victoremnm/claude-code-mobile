@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+#
+# vm-stop - Stop Vultr VM to save costs
+#
+# Usage: vm-stop [--force]
+#
+# Environment variables:
+#   VULTR_API_KEY     - Your Vultr API key
+#   VULTR_INSTANCE_ID - Your VM instance ID
+
+set -euo pipefail
+
+# Configuration
+CONFIG_FILE="${HOME}/.config/claude-mobile/config"
+[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+
+VULTR_API_KEY="${VULTR_API_KEY:-}"
+VULTR_INSTANCE_ID="${VULTR_INSTANCE_ID:-}"
+FORCE="${1:-}"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log() { echo -e "${GREEN}[+]${NC} $1"; }
+warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+error() { echo -e "${RED}[✗]${NC} $1" >&2; }
+
+check_requirements() {
+    if [[ -z "$VULTR_API_KEY" ]]; then
+        error "VULTR_API_KEY not set"
+        exit 1
+    fi
+    if [[ -z "$VULTR_INSTANCE_ID" ]]; then
+        error "VULTR_INSTANCE_ID not set"
+        exit 1
+    fi
+}
+
+get_instance_power() {
+    curl -s "https://api.vultr.com/v2/instances/${VULTR_INSTANCE_ID}" \
+        -H "Authorization: Bearer ${VULTR_API_KEY}" | jq -r '.instance.power_status'
+}
+
+get_instance_info() {
+    curl -s "https://api.vultr.com/v2/instances/${VULTR_INSTANCE_ID}" \
+        -H "Authorization: Bearer ${VULTR_API_KEY}"
+}
+
+halt_instance() {
+    log "Halting VM instance..."
+    curl -s -X POST "https://api.vultr.com/v2/instances/${VULTR_INSTANCE_ID}/halt" \
+        -H "Authorization: Bearer ${VULTR_API_KEY}" > /dev/null
+}
+
+wait_for_stop() {
+    log "Waiting for VM to stop..."
+    local max_attempts=60
+    local attempt=0
+
+    while [[ $attempt -lt $max_attempts ]]; do
+        local status
+        status=$(get_instance_power)
+        if [[ "$status" == "stopped" ]]; then
+            log "VM stopped successfully"
+            return 0
+        fi
+        ((attempt++))
+        printf "."
+        sleep 2
+    done
+
+    echo ""
+    warn "VM may still be stopping"
+    return 1
+}
+
+show_cost_summary() {
+    local info
+    info=$(get_instance_info)
+
+    local plan label
+    plan=$(echo "$info" | jq -r '.instance.plan')
+    label=$(echo "$info" | jq -r '.instance.label')
+
+    log "Instance: $label ($plan)"
+    log "Billing paused - no charges while stopped"
+}
+
+main() {
+    check_requirements
+
+    local power_status
+    power_status=$(get_instance_power)
+
+    if [[ "$power_status" == "stopped" ]]; then
+        log "VM is already stopped"
+        exit 0
+    fi
+
+    if [[ "$FORCE" != "--force" ]]; then
+        warn "This will stop the VM. Active sessions will be lost."
+        read -p "Continue? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log "Cancelled"
+            exit 0
+        fi
+    fi
+
+    halt_instance
+    wait_for_stop
+    show_cost_summary
+}
+
+main "$@"
