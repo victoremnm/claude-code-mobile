@@ -73,17 +73,19 @@ chmod +x /usr/local/bin/vm-*
 ### 5. Set Up Push Notifications
 
 1. Install the ntfy app on your phone ([iOS](https://apps.apple.com/app/ntfy/id1625396347) / [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy))
-2. Subscribe to a topic (e.g., `claude-code-yourname`)
-3. Add to your config: `NTFY_TOPIC="claude-code-yourname"`
-4. On the VM, install the hook:
+2. Subscribe to a unique topic (e.g., `claude-code-yourname-abc123`)
+3. On the VM, run the setup script:
 
 ```bash
-cp hooks/ntfy-notify.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/ntfy-notify.sh
+# Clone this repo
+git clone https://github.com/victoremnm/claude-code-mobile.git
+cd claude-code-mobile
 
-# Add to ~/.claude/settings.json (merge with existing)
-cat config/claude-settings.json
+# One-command setup (replace with your topic name)
+./scripts/setup-hooks your-unique-topic-name
 ```
+
+This installs the hook, creates the config, and sends a test notification.
 
 ### 6. Connect From Your Phone
 
@@ -175,6 +177,7 @@ claude-code-mobile/
 │   ├── vm-stop           # Stop VM to save costs
 │   ├── vm-status         # Check VM status
 │   ├── vm-bootstrap      # Set up fresh VM
+│   ├── setup-hooks       # One-command notification setup
 │   └── port-alloc        # Deterministic port allocation
 ├── hooks/
 │   └── ntfy-notify.sh    # Push notification hook
@@ -183,8 +186,23 @@ claude-code-mobile/
 │   ├── claude-settings.json  # Claude Code hook config
 │   ├── tmux.conf         # tmux configuration
 │   └── zshrc-additions.sh    # Shell aliases
+├── tests/
+│   ├── run-tests.sh      # Run all tests
+│   ├── test-ntfy-notify.sh   # Unit tests for notification hook
+│   └── test-setup-hooks.sh   # Integration tests for setup
+├── .env.example          # Environment variables template
 └── docs/
     └── ios-shortcut.md   # iOS Shortcut setup guide
+```
+
+## Testing
+
+Run the test suite to verify everything works:
+
+```bash
+./tests/run-tests.sh          # Run all tests
+./tests/run-tests.sh unit     # Unit tests only
+./tests/run-tests.sh integration  # Integration tests only
 ```
 
 ## Cost
