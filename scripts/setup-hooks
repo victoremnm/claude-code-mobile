@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+#
+# setup-hooks - Quick setup for Claude Code mobile notifications
+#
+# Usage: ./setup-hooks <ntfy-topic>
+# Example: ./setup-hooks my-claude-notifications
+#
+# This script:
+#   1. Creates necessary directories
+#   2. Installs the notification hook
+#   3. Configures Claude Code settings
+#   4. Sends a test notification
+
+set -euo pipefail
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+log() { echo -e "${GREEN}✓${NC} $1"; }
+warn() { echo -e "${YELLOW}!${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1" >&2; exit 1; }
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Check for topic argument
+NTFY_TOPIC="${1:-}"
+if [[ -z "$NTFY_TOPIC" ]]; then
+    echo "Usage: $0 <ntfy-topic>"
+    echo ""
+    echo "Example: $0 claude-code-myname"
+    echo ""
+    echo "Steps before running this script:"
+    echo "  1. Install ntfy app on your phone (iOS/Android)"
+    echo "  2. Subscribe to a unique topic in the app"
+    echo "  3. Run this script with that topic name"
+    exit 1
+fi
+
+echo ""
+echo "Setting up Claude Code Mobile notifications..."
+echo ""
+
+# Create directories
+log "Creating directories..."
+mkdir -p ~/.claude/hooks
+mkdir -p ~/.config/claude-mobile
+
+# Install hook script
+log "Installing notification hook..."
+cp "$SCRIPT_DIR/hooks/ntfy-notify.sh" ~/.claude/hooks/
+chmod +x ~/.claude/hooks/ntfy-notify.sh
+
+# Create config
+log "Configuring ntfy topic: $NTFY_TOPIC"
+cat > ~/.config/claude-mobile/config << EOF
+# Claude Code Mobile Configuration
+NTFY_TOPIC="$NTFY_TOPIC"
+NTFY_SERVER="https://ntfy.sh"
+EOF
+
+# Check for existing settings.json
+if [[ -f ~/.claude/settings.json ]]; then
+    warn "Existing ~/.claude/settings.json found"
+    echo "  Please manually merge the hooks from:"
+    echo "  $SCRIPT_DIR/config/claude-settings.json"
+else
+    log "Creating Claude Code settings..."
+    cp "$SCRIPT_DIR/config/claude-settings.json" ~/.claude/settings.json
+fi
+
+# Send test notification
+log "Sending test notification..."
+if ~/.claude/hooks/ntfy-notify.sh test; then
+    echo ""
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  Setup Complete!${NC}"
+    echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "  Check your phone - you should have received a test notification."
+    echo ""
+    echo "  You'll now get notifications when:"
+    echo "    • Claude asks you a question"
+    echo "    • Claude needs tool approval"
+    echo "    • Claude finishes a task"
+    echo "    • Claude encounters an error"
+    echo ""
+    echo "  Test anytime with: ~/.claude/hooks/ntfy-notify.sh test"
+    echo ""
+else
+    error "Failed to send test notification. Check your topic name."
+fi

@@ -96,6 +96,12 @@ case "$EVENT_TYPE" in
     error)
         handle_error
         ;;
+    stop|done)
+        notify "[$PROJECT_NAME] Claude has finished the task" "Claude Code - Done" "default"
+        ;;
+    notification)
+        notify "[$PROJECT_NAME] Claude has a notification for you" "Claude Code" "default"
+        ;;
     test)
         notify "Test notification from Claude Code Mobile" "Test" "default"
         echo "Test notification sent to topic: $NTFY_TOPIC"
