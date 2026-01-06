@@ -22,8 +22,30 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 check_requirements() {
-    if [[ -z "$VULTR_API_KEY" || -z "$VULTR_INSTANCE_ID" ]]; then
-        echo "Error: Configuration not set" >&2
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo -e "${RED}Error:${NC} Config file not found at $CONFIG_FILE" >&2
+        echo "Create it with:" >&2
+        echo "  mkdir -p ~/.config/claude-mobile" >&2
+        echo "  cp config/config.example ~/.config/claude-mobile/config" >&2
+        exit 1
+    fi
+
+    if [[ -z "$VULTR_API_KEY" ]]; then
+        echo -e "${RED}Error:${NC} VULTR_API_KEY not set in $CONFIG_FILE" >&2
+        exit 1
+    fi
+
+    if [[ -z "$VULTR_INSTANCE_ID" ]]; then
+        echo -e "${RED}Error:${NC} VULTR_INSTANCE_ID not set in $CONFIG_FILE" >&2
+        exit 1
+    fi
+
+    # Validate instance ID format (should be UUID, not IP)
+    if [[ "$VULTR_INSTANCE_ID" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo -e "${RED}Error:${NC} VULTR_INSTANCE_ID looks like an IP address" >&2
+        echo "It should be a UUID like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" >&2
+        echo "Find it in the Vultr dashboard URL or run:" >&2
+        echo "  curl -s 'https://api.vultr.com/v2/instances' -H 'Authorization: Bearer \$VULTR_API_KEY' | jq '.instances[] | {id, main_ip}'" >&2
         exit 1
     fi
 }
@@ -43,6 +65,17 @@ main() {
 
     local info
     info=$(get_instance_info)
+
+    # Check for API errors
+    if echo "$info" | jq -e '.error' > /dev/null 2>&1; then
+        local error_msg
+        error_msg=$(echo "$info" | jq -r '.error')
+        echo -e "${RED}Error:${NC} Vultr API error: $error_msg" >&2
+        if [[ "$error_msg" == *"Unauthorized"* ]]; then
+            echo "Check your VULTR_API_KEY and ensure your IP is whitelisted (or disable IP restrictions)" >&2
+        fi
+        exit 1
+    fi
 
     if [[ "$OUTPUT_FORMAT" == "--json" ]]; then
         echo "$info" | jq '.'

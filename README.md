@@ -221,21 +221,91 @@ Storage charges still apply when stopped (~$0.10/GB/month), but compute is pause
 
 ## Troubleshooting
 
-### Can't connect after VM start
-- Check Tailscale is running: `tailscale status`
-- Verify SSH port: `nc -zv <tailscale-ip> <port>`
+### "Connection refused" from Termius (phone)
+
+**Most common cause: Fail2ban banned your phone's Tailscale IP**
+
+Check on VM:
+```bash
+nft list ruleset | grep -A5 "addr-set-sshd"
+```
+
+If your phone's IP (100.x.x.x) is listed, unban it:
+```bash
+fail2ban-client set sshd unbanip 100.x.x.x
+```
+
+Prevent future bans by whitelisting Tailscale:
+```bash
+echo 'ignoreip = 127.0.0.1/8 ::1 100.0.0.0/8' >> /etc/fail2ban/jail.local
+systemctl restart fail2ban
+```
+
+### vm-status shows "null" for all values
+
+**Cause 1: Wrong instance ID** - should be UUID, not IP address
+```bash
+# Find your real instance ID
+curl -s "https://api.vultr.com/v2/instances" \
+  -H "Authorization: Bearer $VULTR_API_KEY" | jq '.instances[] | {id, main_ip}'
+```
+
+**Cause 2: Vultr API IP restrictions**
+- Go to https://my.vultr.com/settings/#settingsapi
+- Remove IP restrictions or add your current IP
+- Check your IP: `curl ifconfig.me`
+
+### "apt lock" error during bootstrap
+
+Fresh Ubuntu VMs run auto-updates. Wait or kill:
+```bash
+# Wait (safer)
+while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 5; done
+
+# Or kill (faster)
+killall unattended-upgr apt apt-get
+```
+
+### SSH works from Mac but not phone
+
+1. Verify Tailscale is connected on phone (check the app)
+2. Ensure SSH key from Termius is in `~/.ssh/authorized_keys` on VM
+3. Check fail2ban hasn't banned the phone (see above)
 
 ### mosh won't connect
-- Ensure UDP ports 60000-61000 are open
-- Try regular SSH first to verify connectivity
 
-### Not receiving notifications
+- Ensure mosh is installed on VM: `apt install mosh`
+- Check UDP ports 60000-61000 are open: `nft list ruleset | grep 60000`
+- Try regular SSH first to isolate the issue
+
+### "Permission denied (publickey)"
+
+Your SSH key isn't on the VM. Add it:
+```bash
+# Get your public key (on Mac)
+cat ~/.ssh/id_ed25519.pub
+
+# Add to VM
+echo "ssh-ed25519 AAAA..." >> ~/.ssh/authorized_keys
+```
+
+For Termius: Generate a key in Keychain, then add its public key to the VM.
+
+### vm-start requires sudo
+
+Fix script permissions:
+```bash
+sudo chmod 755 /usr/local/bin/vm-*
+```
+
+### Not receiving push notifications
 - Check `POKE_WEBHOOK_URL` in config
 - Test manually: `~/.claude/hooks/poke-notify.sh test`
+- Verify hook is in `~/.claude/settings.json`
 
 ### Claude Code slow
 - Check VM resources: `htop`
-- Consider larger VM plan
+- Consider larger VM plan (vhf-4c-16gb minimum recommended)
 
 ## Credits
 

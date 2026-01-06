@@ -44,8 +44,18 @@ detect_os() {
     log "Detected OS: $OS"
 }
 
+wait_for_apt() {
+    log "Waiting for apt lock (fresh VMs run auto-updates)..."
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        sleep 5
+    done
+    log "apt lock released"
+}
+
 install_packages() {
     log "Installing essential packages..."
+
+    wait_for_apt
 
     case $OS in
         ubuntu|debian)
@@ -134,6 +144,9 @@ table inet filter {
         # Accept loopback
         iif lo accept
 
+        # Accept ALL traffic from Tailscale network (100.x.x.x)
+        ip saddr 100.0.0.0/8 accept
+
         # Accept ICMP
         ip protocol icmp accept
         ip6 nexthdr icmpv6 accept
@@ -169,11 +182,14 @@ EOF
 setup_fail2ban() {
     log "Configuring fail2ban..."
 
+    # IMPORTANT: Whitelist Tailscale IPs (100.x.x.x) to prevent banning mobile devices
     cat > /etc/fail2ban/jail.local << EOF
 [DEFAULT]
 bantime = 3600
 findtime = 600
 maxretry = 3
+# Whitelist localhost and Tailscale network - CRITICAL for mobile access
+ignoreip = 127.0.0.1/8 ::1 100.0.0.0/8
 
 [sshd]
 enabled = true
