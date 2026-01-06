@@ -159,23 +159,23 @@ pr-notify
 
 ```mermaid
 flowchart TB
-    subgraph Phone["Your Phone"]
-        Termius["Termius<br/>(SSH/mosh)"]
-        TSPhone["Tailscale<br/>(VPN)"]
-        ntfy["ntfy.sh<br/>(push notifications)"]
+    subgraph Phone[Your Phone]
+        Termius[Termius - SSH/mosh]
+        TSPhone[Tailscale VPN]
+        ntfy[ntfy.sh notifications]
     end
 
-    subgraph VM["Vultr VM"]
-        subgraph tmux["tmux"]
-            W1["Window 1<br/>Claude<br/>feature-A"]
-            W2["Window 2<br/>Claude<br/>feature-B"]
-            W3["Window 3<br/>Claude<br/>feature-C"]
-            W4["Window 4<br/>bash"]
+    subgraph VM[Vultr VM]
+        subgraph tmux[tmux sessions]
+            W1[Claude: feature-A]
+            W2[Claude: feature-B]
+            W3[Claude: feature-C]
+            W4[bash]
         end
-        Security["Security: nftables + fail2ban + Tailscale-only"]
+        Security[nftables + fail2ban]
     end
 
-    Termius -->|"Tailscale Private Net"| tmux
+    Termius -->|Tailscale| tmux
     TSPhone --> VM
     tmux -->|webhook| ntfy
 ```
@@ -203,6 +203,7 @@ claude-code-mobile/
 │   ├── run-tests.sh          # Run all tests
 │   ├── test-ntfy-notify.sh   # Unit tests for notification hook
 │   ├── test-pr-notify.sh     # Unit tests for PR notifications
+│   ├── test-mermaid.sh       # Validate Mermaid diagram syntax
 │   └── test-setup-hooks.sh   # Integration tests for setup
 ├── .env.example          # Environment variables template
 └── docs/
