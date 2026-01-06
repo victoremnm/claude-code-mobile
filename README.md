@@ -2,10 +2,14 @@
 
 Run Claude Code agents from your phone. No laptop required.
 
-```
-Phone → Termius → mosh → Tailscale → Vultr VM → Claude Code
-                              ↓
-                    Push notification ← Poke webhook
+```mermaid
+flowchart LR
+    Phone --> Termius
+    Termius -->|mosh| Tailscale
+    Tailscale --> VM[Vultr VM]
+    VM --> Claude[Claude Code]
+    Claude -->|webhook| ntfy[ntfy.sh]
+    ntfy -->|push| Phone
 ```
 
 ## What This Does
@@ -68,14 +72,14 @@ chmod +x /usr/local/bin/vm-*
 
 ### 5. Set Up Push Notifications
 
-1. Create account at [poke.dev](https://poke.dev)
-2. Create a webhook, copy the URL
-3. Add to your config: `POKE_WEBHOOK_URL="https://..."`
+1. Install the ntfy app on your phone ([iOS](https://apps.apple.com/app/ntfy/id1625396347) / [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy))
+2. Subscribe to a topic (e.g., `claude-code-yourname`)
+3. Add to your config: `NTFY_TOPIC="claude-code-yourname"`
 4. On the VM, install the hook:
 
 ```bash
-cp hooks/poke-notify.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/poke-notify.sh
+cp hooks/ntfy-notify.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/ntfy-notify.sh
 
 # Add to ~/.claude/settings.json (merge with existing)
 cat config/claude-settings.json
@@ -139,31 +143,27 @@ vm-stop         # Halt VM, stop billing
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Your Phone                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │   Termius   │  │  Tailscale  │  │    Poke / ntfy.sh   │ │
-│  │  (SSH/mosh) │  │    (VPN)    │  │ (push notifications)│ │
-│  └──────┬──────┘  └──────┬──────┘  └──────────▲──────────┘ │
-└─────────┼────────────────┼────────────────────┼─────────────┘
-          │                │                    │
-          │   Tailscale    │                    │ webhook
-          │   Private Net  │                    │
-          │                │                    │
-┌─────────▼────────────────▼────────────────────┼─────────────┐
-│                      Vultr VM                 │             │
-│  ┌────────────────────────────────────────────┴───────────┐ │
-│  │                       tmux                             │ │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │ │
-│  │  │ Window 1 │ │ Window 2 │ │ Window 3 │ │ Window 4 │  │ │
-│  │  │  Claude  │ │  Claude  │ │  Claude  │ │   bash   │  │ │
-│  │  │ feature-A│ │ feature-B│ │ feature-C│ │          │  │ │
-│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘  │ │
-│  └────────────────────────────────────────────────────────┘ │
-│                                                             │
-│  Security: nftables + fail2ban + Tailscale-only access     │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Phone["Your Phone"]
+        Termius["Termius<br/>(SSH/mosh)"]
+        TSPhone["Tailscale<br/>(VPN)"]
+        ntfy["ntfy.sh<br/>(push notifications)"]
+    end
+
+    subgraph VM["Vultr VM"]
+        subgraph tmux["tmux"]
+            W1["Window 1<br/>Claude<br/>feature-A"]
+            W2["Window 2<br/>Claude<br/>feature-B"]
+            W3["Window 3<br/>Claude<br/>feature-C"]
+            W4["Window 4<br/>bash"]
+        end
+        Security["Security: nftables + fail2ban + Tailscale-only"]
+    end
+
+    Termius -->|"Tailscale Private Net"| tmux
+    TSPhone --> VM
+    tmux -->|webhook| ntfy
 ```
 
 ## Files
@@ -177,7 +177,7 @@ claude-code-mobile/
 │   ├── vm-bootstrap      # Set up fresh VM
 │   └── port-alloc        # Deterministic port allocation
 ├── hooks/
-│   └── poke-notify.sh    # Push notification hook
+│   └── ntfy-notify.sh    # Push notification hook
 ├── config/
 │   ├── config.example    # Configuration template
 │   ├── claude-settings.json  # Claude Code hook config
@@ -216,7 +216,7 @@ Storage charges still apply when stopped (~$0.10/GB/month), but compute is pause
 **Accounts needed:**
 - Vultr (or similar VPS provider)
 - Tailscale
-- Poke (or ntfy.sh for self-hosted)
+- ntfy.sh (free, or self-hostable)
 - Anthropic API key
 
 ## Troubleshooting
@@ -299,9 +299,10 @@ sudo chmod 755 /usr/local/bin/vm-*
 ```
 
 ### Not receiving push notifications
-- Check `POKE_WEBHOOK_URL` in config
-- Test manually: `~/.claude/hooks/poke-notify.sh test`
+- Check `NTFY_TOPIC` in config
+- Test manually: `~/.claude/hooks/ntfy-notify.sh test`
 - Verify hook is in `~/.claude/settings.json`
+- Ensure you're subscribed to the topic in the ntfy app
 
 ### Claude Code slow
 - Check VM resources: `htop`

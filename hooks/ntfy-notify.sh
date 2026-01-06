@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 #
-# poke-notify.sh - Send push notifications via Poke when Claude needs input
+# ntfy-notify.sh - Send push notifications via ntfy.sh when Claude needs input
 #
-# Usage: poke-notify.sh <event_type>
+# Usage: ntfy-notify.sh <event_type>
 #
 # Environment variables:
-#   POKE_WEBHOOK_URL - Your Poke webhook URL
-#   EVENT_DATA       - JSON data from Claude Code hook (set automatically)
+#   NTFY_TOPIC  - Your ntfy topic name (required)
+#   NTFY_SERVER - ntfy server URL (default: https://ntfy.sh)
+#   EVENT_DATA  - JSON data from Claude Code hook (set automatically)
 #
 # Install:
-#   1. Get a Poke account at https://poke.dev
-#   2. Create a webhook and copy the URL
-#   3. Add the URL to ~/.config/claude-mobile/config
+#   1. Install ntfy app on your phone (iOS/Android)
+#   2. Subscribe to a topic (e.g., "claude-code-yourname")
+#   3. Add the topic to ~/.config/claude-mobile/config
 #   4. Add this hook to ~/.claude/settings.json
 
 set -euo pipefail
@@ -20,7 +21,8 @@ set -euo pipefail
 CONFIG_FILE="${HOME}/.config/claude-mobile/config"
 [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
 
-POKE_WEBHOOK_URL="${POKE_WEBHOOK_URL:-}"
+NTFY_TOPIC="${NTFY_TOPIC:-}"
+NTFY_SERVER="${NTFY_SERVER:-https://ntfy.sh}"
 EVENT_TYPE="${1:-unknown}"
 
 # Get project name from current directory
@@ -29,15 +31,18 @@ PROJECT_NAME="${PWD##*/}"
 notify() {
     local message="$1"
     local title="${2:-Claude Code}"
+    local priority="${3:-default}"
 
-    if [[ -z "$POKE_WEBHOOK_URL" ]]; then
-        echo "Warning: POKE_WEBHOOK_URL not set" >&2
+    if [[ -z "$NTFY_TOPIC" ]]; then
+        echo "Warning: NTFY_TOPIC not set" >&2
         return 1
     fi
 
-    curl -s -X POST "$POKE_WEBHOOK_URL" \
-        -H "Content-Type: application/json" \
-        -d "{\"title\": \"$title\", \"message\": \"$message\"}" > /dev/null
+    curl -s -X POST "${NTFY_SERVER}/${NTFY_TOPIC}" \
+        -H "Title: $title" \
+        -H "Priority: $priority" \
+        -H "Tags: robot" \
+        -d "$message" > /dev/null
 }
 
 handle_question() {
@@ -51,9 +56,9 @@ handle_question() {
     fi
 
     if [[ -n "$question" ]]; then
-        notify "[$PROJECT_NAME] $question" "Claude needs input: $header"
+        notify "[$PROJECT_NAME] $question" "Claude needs input: $header" "high"
     else
-        notify "[$PROJECT_NAME] Claude is waiting for your input" "Claude Code"
+        notify "[$PROJECT_NAME] Claude is waiting for your input" "Claude Code" "high"
     fi
 }
 
@@ -65,9 +70,9 @@ handle_tool_blocked() {
     fi
 
     if [[ -n "$tool_name" ]]; then
-        notify "[$PROJECT_NAME] Tool blocked: $tool_name" "Claude Code - Approval Needed"
+        notify "[$PROJECT_NAME] Tool blocked: $tool_name" "Claude Code - Approval Needed" "high"
     else
-        notify "[$PROJECT_NAME] A tool requires your approval" "Claude Code - Approval Needed"
+        notify "[$PROJECT_NAME] A tool requires your approval" "Claude Code - Approval Needed" "high"
     fi
 }
 
@@ -78,7 +83,7 @@ handle_error() {
         error_msg=$(echo "$EVENT_DATA" | jq -r '.error // empty' 2>/dev/null || echo "")
     fi
 
-    notify "[$PROJECT_NAME] Error: ${error_msg:-Unknown error}" "Claude Code - Error"
+    notify "[$PROJECT_NAME] Error: ${error_msg:-Unknown error}" "Claude Code - Error" "urgent"
 }
 
 case "$EVENT_TYPE" in
@@ -90,6 +95,10 @@ case "$EVENT_TYPE" in
         ;;
     error)
         handle_error
+        ;;
+    test)
+        notify "Test notification from Claude Code Mobile" "Test" "default"
+        echo "Test notification sent to topic: $NTFY_TOPIC"
         ;;
     *)
         notify "[$PROJECT_NAME] Claude needs attention" "Claude Code"

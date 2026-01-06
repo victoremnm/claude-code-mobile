@@ -15,10 +15,11 @@ TAILSCALE_IP="100.x.x.x"
 SSH_PORT="22"           # Default 22, change if you use a custom port
 SSH_USER="your-username"
 
-# Poke push notifications
-# Get your webhook URL from: https://poke.dev
-POKE_WEBHOOK_URL="https://poke.dev/api/webhook/your-webhook-id"
+# ntfy.sh push notifications
+# 1. Install ntfy app on your phone (iOS/Android)
+# 2. Subscribe to a unique topic name
+# 3. Set the topic name below
+NTFY_TOPIC="claude-code-yourname"
 
-# Optional: ntfy.sh as alternative to Poke (self-hostable)
-# NTFY_TOPIC="your-topic-name"
-# NTFY_SERVER="https://ntfy.sh"  # or your self-hosted server
+# Optional: Use a self-hosted ntfy server instead of ntfy.sh
+# NTFY_SERVER="https://ntfy.sh"

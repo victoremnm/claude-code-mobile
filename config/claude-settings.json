@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/poke-notify.sh question"
+            "command": "~/.claude/hooks/ntfy-notify.sh question"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/poke-notify.sh notification"
+            "command": "~/.claude/hooks/ntfy-notify.sh notification"
           }
         ]
       }

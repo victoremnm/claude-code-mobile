@@ -299,7 +299,7 @@ print_summary() {
     echo "       SSH_PORT=$SSH_PORT"
     echo "       TAILSCALE_IP=<your-tailscale-ip>"
     echo "    3. Set your ANTHROPIC_API_KEY in ~/.bashrc or ~/.zshrc"
-    echo "    4. Configure Poke notifications in ~/.config/claude-mobile/config"
+    echo "    4. Configure ntfy notifications in ~/.config/claude-mobile/config"
     echo ""
     echo "  Connect from your phone:"
     echo "    mosh --ssh=\"ssh -p $SSH_PORT\" $USERNAME@$tailscale_ip"
