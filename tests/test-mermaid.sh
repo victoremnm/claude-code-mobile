@@ -4,7 +4,8 @@
 #
 # Usage: ./test-mermaid.sh
 #
-# This script extracts Mermaid diagrams and validates their syntax
+# This script extracts Mermaid diagrams and validates their syntax.
+# If mmdc (mermaid-cli) is available, it also verifies rendering.
 
 set -euo pipefail
 
@@ -119,16 +120,55 @@ for diagram_file in "$TEST_DIR"/diagram_*.mmd; do
 done
 
 # =============================================================================
+# Rendering validation (if mmdc available)
+# =============================================================================
+
+if command -v mmdc &>/dev/null; then
+    echo ""
+    echo "Testing actual rendering with mmdc..."
+
+    # Create puppeteer config for headless rendering
+    cat > "$TEST_DIR/puppeteer.json" << 'PCONF'
+{"args": ["--no-sandbox", "--disable-setuid-sandbox"]}
+PCONF
+
+    for diagram_file in "$TEST_DIR"/diagram_*.mmd; do
+        [[ -f "$diagram_file" ]] || continue
+
+        BLOCK_NUM=$(basename "$diagram_file" | sed 's/diagram_\([0-9]*\)\.mmd/\1/')
+        TESTS_RUN=$((TESTS_RUN + 1))
+
+        output_svg="$TEST_DIR/diagram_${BLOCK_NUM}.svg"
+
+        if mmdc -i "$diagram_file" -o "$output_svg" -p "$TEST_DIR/puppeteer.json" 2>/dev/null; then
+            if [[ -f "$output_svg" && -s "$output_svg" ]]; then
+                echo -e "${GREEN}✓${NC} Diagram $BLOCK_NUM: Renders successfully"
+                TESTS_PASSED=$((TESTS_PASSED + 1))
+            else
+                echo -e "${RED}✗${NC} Diagram $BLOCK_NUM: Render produced empty output"
+                TESTS_FAILED=$((TESTS_FAILED + 1))
+            fi
+        else
+            echo -e "${RED}✗${NC} Diagram $BLOCK_NUM: Render failed"
+            TESTS_FAILED=$((TESTS_FAILED + 1))
+        fi
+    done
+else
+    echo ""
+    echo "(Skipping render test - mmdc not installed)"
+fi
+
+# =============================================================================
 # Results
 # =============================================================================
 
 echo ""
 echo "═══════════════════════════════════════════════════════════"
-echo "Results: $TESTS_PASSED/$TESTS_RUN diagrams valid"
+echo "Results: $TESTS_PASSED/$TESTS_RUN tests passed"
 if [[ $TESTS_FAILED -gt 0 ]]; then
-    echo -e "${RED}$TESTS_FAILED diagram(s) have issues${NC}"
+    echo -e "${RED}$TESTS_FAILED test(s) failed${NC}"
     exit 1
 else
-    echo -e "${GREEN}All diagrams valid!${NC}"
+    echo -e "${GREEN}All tests passed!${NC}"
     exit 0
 fi

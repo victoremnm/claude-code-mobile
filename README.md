@@ -159,25 +159,25 @@ pr-notify
 
 ```mermaid
 flowchart TB
-    subgraph Phone[Your Phone]
-        Termius[Termius - SSH/mosh]
-        TSPhone[Tailscale VPN]
-        ntfy[ntfy.sh notifications]
+    subgraph Phone
+        Termius
+        TSPhone[Tailscale]
+        ntfy[ntfy.sh]
     end
 
-    subgraph VM[Vultr VM]
-        subgraph tmux[tmux sessions]
-            W1[Claude: feature-A]
-            W2[Claude: feature-B]
-            W3[Claude: feature-C]
+    subgraph VM
+        subgraph tmux
+            W1[Claude A]
+            W2[Claude B]
+            W3[Claude C]
             W4[bash]
         end
-        Security[nftables + fail2ban]
+        FW[firewall]
     end
 
-    Termius -->|Tailscale| tmux
+    Termius --> tmux
     TSPhone --> VM
-    tmux -->|webhook| ntfy
+    tmux --> ntfy
 ```
 
 ## Files
