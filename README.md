@@ -143,6 +143,18 @@ C-a 1-9         # Jump to window
 vm-stop         # Halt VM, stop billing
 ```
 
+### PR Notifications
+
+Get notified on your phone when a PR is ready for review:
+
+```bash
+# After creating a PR
+pr-notify https://github.com/user/repo/pull/123
+
+# Or from the branch with an open PR
+pr-notify
+```
+
 ## Architecture
 
 ```mermaid
@@ -178,6 +190,7 @@ claude-code-mobile/
 │   ├── vm-status         # Check VM status
 │   ├── vm-bootstrap      # Set up fresh VM
 │   ├── setup-hooks       # One-command notification setup
+│   ├── pr-notify         # Send notification for PR reviews
 │   └── port-alloc        # Deterministic port allocation
 ├── hooks/
 │   └── ntfy-notify.sh    # Push notification hook
@@ -187,8 +200,9 @@ claude-code-mobile/
 │   ├── tmux.conf         # tmux configuration
 │   └── zshrc-additions.sh    # Shell aliases
 ├── tests/
-│   ├── run-tests.sh      # Run all tests
+│   ├── run-tests.sh          # Run all tests
 │   ├── test-ntfy-notify.sh   # Unit tests for notification hook
+│   ├── test-pr-notify.sh     # Unit tests for PR notifications
 │   └── test-setup-hooks.sh   # Integration tests for setup
 ├── .env.example          # Environment variables template
 └── docs/

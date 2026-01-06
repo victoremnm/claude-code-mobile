@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#
+# pr-notify - Send push notification when a PR is ready for review
+#
+# Usage: pr-notify [pr-url]
+#
+# If no URL provided, uses the current branch's PR from `gh pr view`
+#
+# Environment variables:
+#   NTFY_TOPIC  - Your ntfy topic name (required)
+#   NTFY_SERVER - ntfy server URL (default: https://ntfy.sh)
+
+set -euo pipefail
+
+# Configuration
+CONFIG_FILE="${HOME}/.config/claude-mobile/config"
+[[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+
+NTFY_TOPIC="${NTFY_TOPIC:-}"
+NTFY_SERVER="${NTFY_SERVER:-https://ntfy.sh}"
+
+if [[ -z "$NTFY_TOPIC" ]]; then
+    echo "Error: NTFY_TOPIC not set" >&2
+    echo "Set it in ~/.config/claude-mobile/config" >&2
+    exit 1
+fi
+
+# Get PR info
+PR_URL="${1:-}"
+
+if [[ -z "$PR_URL" ]]; then
+    # Try to get PR URL from current branch
+    if ! PR_URL=$(gh pr view --json url -q '.url' 2>/dev/null); then
+        echo "Error: No PR URL provided and no PR found for current branch" >&2
+        echo "Usage: pr-notify [pr-url]" >&2
+        exit 1
+    fi
+fi
+
+# Extract PR number from URL
+PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$' || echo "")
+
+# Get PR title if gh is available
+PR_TITLE=""
+if command -v gh &>/dev/null && [[ -n "$PR_NUMBER" ]]; then
+    PR_TITLE=$(gh pr view "$PR_NUMBER" --json title -q '.title' 2>/dev/null || echo "")
+fi
+
+# Build message
+if [[ -n "$PR_TITLE" ]]; then
+    MESSAGE="PR #${PR_NUMBER}: ${PR_TITLE}"
+else
+    MESSAGE="New PR ready for review"
+fi
+
+# Send notification
+curl -s -X POST "${NTFY_SERVER}/${NTFY_TOPIC}" \
+    -H "Title: PR Ready for Review" \
+    -H "Priority: high" \
+    -H "Tags: mag,git" \
+    -H "Click: ${PR_URL}" \
+    -d "$MESSAGE" > /dev/null
+
+echo "Notification sent: $MESSAGE"
+echo "Link: $PR_URL"
