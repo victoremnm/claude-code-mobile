@@ -172,12 +172,14 @@ flowchart TB
             W3[Claude: feature-C]
             W4[bash]
         end
+        Hooks[hooks/ntfy-notify.sh]
         Security[nftables + fail2ban]
     end
 
     Termius -->|Tailscale| tmux
     TSPhone --> VM
-    tmux -->|webhook| ntfy
+    W1 & W2 & W3 -->|triggers| Hooks
+    Hooks -->|POST| ntfy
 ```
 
 ## Files
