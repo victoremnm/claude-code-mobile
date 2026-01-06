@@ -37,6 +37,11 @@ run_unit_tests() {
     else
         FAILED=1
     fi
+    if bash "$SCRIPT_DIR/test-mermaid.sh"; then
+        echo ""
+    else
+        FAILED=1
+    fi
 }
 
 run_integration_tests() {
